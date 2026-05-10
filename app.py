@@ -3,78 +3,99 @@ from modules.database import init_db, agregar_actividad, obtener_datos, borrar_d
 from datetime import time
 
 # Configuración inicial
-st.set_page_config(page_title="Tsukuyomi System", page_icon="🌙", layout="wide")
+st.set_page_config(page_title="Tsukuyomi Master System", page_icon="🌙", layout="wide")
 init_db()
 
-# Estilo para los colores de las categorías
 CAT_COLORS = {
-    "Asignatura Universidad": "#4A90E2", # Azul saber
-    "Tarea": "#9B59B6",               # Púrpura deber
-    "Espacio Libre": "#BDC3C7",         # Gris calma (Luna)
-    "Deporte": "#E67E22",               # Naranja energía
-    "Producción": "#2ECC71"             # Verde creación
+    "Asignatura Universidad": "#4A90E2",
+    "Tarea": "#9B59B6",
+    "Espacio Libre": "#BDC3C7",
+    "Deporte": "#E67E22",
+    "Producción": "#2ECC71"
 }
 
 st.markdown("<h1 style='text-align: center; color: #A9C9FF;'>月読 TSUKUYOMI</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8892B0;'>Sincronización Multidía de Actividades</p>", unsafe_allow_html=True)
 
-# Sidebar para ingresar datos
-st.sidebar.markdown("### 🌑 Nueva Fase del Día")
-with st.sidebar.form("form_luna"):
-    act = st.text_input("Nombre de la Actividad")
-    fase = st.selectbox("Día", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-    
-    # NUEVAS CATEGORÍAS
-    cat = st.selectbox("Tipo de Actividad", [
-        "Asignatura Universidad", 
-        "Tarea", 
-        "Espacio Libre", 
-        "Deporte", 
-        "Producción"
-    ])
-    
-    c1, c2 = st.columns(2)
-    t_in = c1.time_input("Inicio", time(8, 0))
-    t_fn = c2.time_input("Fin", time(9, 0))
-    
-    if st.form_submit_button("Sincronizar con Tsukuyomi"):
-        if act:
-            agregar_actividad(act, fase, t_in, t_fn, cat)
-            st.success(f"'{act}' registrado.")
-            st.rerun()
+# --- SIDEBAR: CREADOR MULTIDÍA ---
+st.sidebar.markdown("### 🌑 Programación Maestra")
 
-# Visualización por pestañas
-dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-tabs = st.tabs([f"🌙 {d}" for d in dias])
+with st.sidebar:
+    act_nombre = st.text_input("Nombre de la Actividad")
+    categoria = st.selectbox("Categoría", list(CAT_COLORS.keys()))
+    
+    # Selección de múltiples días
+    dias_seleccionados = st.multiselect(
+        "Selecciona los días para esta actividad",
+        ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    )
+
+    # Diccionario para guardar los horarios de cada día
+    horarios_config = {}
+
+    if dias_seleccionados:
+        st.markdown("---")
+        st.markdown("#### 🕒 Definir Horarios")
+        for d in dias_seleccionados:
+            st.write(f"**{d}:**")
+            c1, c2 = st.columns(2)
+            h_ini = c1.time_input(f"Inicio ({d})", time(8, 0), key=f"ini_{d}")
+            h_fin = c2.time_input(f"Fin ({d})", time(9, 0), key=f"fin_{d}")
+            horarios_config[d] = (h_ini, h_fin)
+        
+        st.markdown("---")
+        if st.button("🌙 Sincronizar Calendario"):
+            if act_nombre:
+                for dia, horas in horarios_config.items():
+                    agregar_actividad(act_nombre, dia, horas[0], horas[1], categoria)
+                st.success(f"Ciclo '{act_nombre}' sincronizado en {len(dias_seleccionados)} días.")
+                st.rerun()
+            else:
+                st.error("Por favor, nombra la actividad.")
+
+# --- CUERPO PRINCIPAL: VISUALIZACIÓN ---
+dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+tabs = st.tabs([f"🏮 {d}" for d in dias_semana])
 df = obtener_datos()
 
 for i, tab in enumerate(tabs):
     with tab:
-        dia_nombre = dias[i]
+        nombre_dia = dias_semana[i]
         if not df.empty:
-            tareas = df[df['fase'] == dia_nombre].sort_values("inicio")
+            # Filtrar y ordenar por hora de inicio
+            tareas = df[df['fase'] == nombre_dia].sort_values("inicio")
+            
             if tareas.empty:
-                st.info("No hay actividades programadas para este ciclo.")
+                st.write(f"<p style='color:#555;'>No hay rituales programados para el {nombre_dia}.</p>", unsafe_allow_html=True)
             else:
                 for _, row in tareas.iterrows():
-                    # Crear una fila con diseño limpio
                     color = CAT_COLORS.get(row['categoria'], "#FFF")
                     
+                    # Diseño de la tarjeta de actividad
                     with st.container():
-                        col_info, col_btn = st.columns([0.85, 0.15])
+                        c_marca, c_info, c_del = st.columns([0.05, 0.80, 0.15])
                         
-                        with col_info:
-                            # Badge de color según categoría
+                        # Línea de color lateral
+                        c_marca.markdown(f"<div style='background-color:{color}; height:60px; width:5px; border-radius:5px;'></div>", unsafe_allow_html=True)
+                        
+                        with c_info:
                             st.markdown(f"""
-                                <div style="border-left: 5px solid {color}; padding-left: 15px; margin-bottom: 10px;">
-                                    <span style="color: {color}; font-weight: bold; font-size: 0.8rem;">{row['categoria'].upper()}</span><br>
-                                    <span style="font-size: 1.2rem; color: #E0E0E0;">{row['inicio']} - {row['fin']} | <b>{row['actividad']}</b></span>
+                                <div style="margin-bottom: 15px;">
+                                    <span style="color:{color}; font-size:0.75rem; font-weight:bold; letter-spacing:1px;">{row['categoria'].upper()}</span><br>
+                                    <span style="font-size:1.1rem; color:#E0E0E0;"><b>{row['actividad']}</b></span><br>
+                                    <span style="color:#8892B0; font-size:0.9rem;">🕒 {row['inicio']} - {row['fin']}</span>
                                 </div>
                             """, unsafe_allow_html=True)
                         
-                        with col_btn:
-                            st.write("") # Espaciador
-                            if st.button("Eliminar", key=f"del_{row['id']}"):
+                        with c_del:
+                            if st.button("🗑️", key=f"del_{row['id']}"):
                                 borrar_dato(row['id'])
                                 st.rerun()
         else:
-            st.write("El cielo está despejado. Añade tu primera actividad en el panel izquierdo.")
+            st.write("El Santuario está vacío.")
+
+# Gráfico de carga de tiempo (Opcional)
+if not df.empty:
+    with st.expander("📊 Ver Balance de Energías (Distribución de Tareas)"):
+        stats = df['categoria'].value_counts()
+        st.bar_chart(stats)
