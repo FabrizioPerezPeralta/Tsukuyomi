@@ -1,66 +1,80 @@
 import streamlit as st
-from modules.database import init_db, save_task, get_tasks, delete_task
+from modules.database import init_db, agregar_actividad, obtener_datos, borrar_dato
 from datetime import time
 
-# Inicializar
-st.set_page_config(page_title="Tsukuyomi Planner", page_icon="🌙", layout="wide")
+# Configuración inicial
+st.set_page_config(page_title="Tsukuyomi System", page_icon="🌙", layout="wide")
 init_db()
 
-# Título Estilizado
-st.markdown("""
-    <style>
-    .lunar-title {
-        font-family: 'Playfair Display', serif;
-        color: #A9C9FF;
-        text-align: center;
-        font-size: 3rem;
-        letter-spacing: 5px;
-        text-shadow: 2px 2px 10px #A9C9FF55;
-    }
-    </style>
-    <h1 class="lunar-title">TSUKUYOMI</h1>
-    <p style='text-align: center; color: #8892B0;'>Ordenando las fases de tu tiempo</p>
-    """, unsafe_allow_html=True)
+# Estilo para los colores de las categorías
+CAT_COLORS = {
+    "Asignatura Universidad": "#4A90E2", # Azul saber
+    "Tarea": "#9B59B6",               # Púrpura deber
+    "Espacio Libre": "#BDC3C7",         # Gris calma (Luna)
+    "Deporte": "#E67E22",               # Naranja energía
+    "Producción": "#2ECC71"             # Verde creación
+}
 
-# Sidebar - Creación de Tareas
-st.sidebar.markdown("### 🌑 Nueva Fase")
-with st.sidebar.form("nueva_tarea"):
-    tarea = st.text_input("¿Qué actividad realizarás?")
-    fase = st.selectbox("Día de la semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-    col1, col2 = st.columns(2)
-    inicio = col1.time_input("Inicio", time(8, 0))
-    fin = col2.time_input("Fin", time(9, 0))
-    prioridad = st.select_slider("Prioridad", options=["Baja", "Media", "Alta"])
+st.markdown("<h1 style='text-align: center; color: #A9C9FF;'>月読 TSUKUYOMI</h1>", unsafe_allow_html=True)
+
+# Sidebar para ingresar datos
+st.sidebar.markdown("### 🌑 Nueva Fase del Día")
+with st.sidebar.form("form_luna"):
+    act = st.text_input("Nombre de la Actividad")
+    fase = st.selectbox("Día", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
     
-    if st.form_submit_button("Sincronizar con la Luna"):
-        save_task(tarea, fase, inicio, fin, prioridad)
-        st.success("Sincronizado.")
-        st.rerun()
+    # NUEVAS CATEGORÍAS
+    cat = st.selectbox("Tipo de Actividad", [
+        "Asignatura Universidad", 
+        "Tarea", 
+        "Espacio Libre", 
+        "Deporte", 
+        "Producción"
+    ])
+    
+    c1, c2 = st.columns(2)
+    t_in = c1.time_input("Inicio", time(8, 0))
+    t_fn = c2.time_input("Fin", time(9, 0))
+    
+    if st.form_submit_button("Sincronizar con Tsukuyomi"):
+        if act:
+            agregar_actividad(act, fase, t_in, t_fn, cat)
+            st.success(f"'{act}' registrado.")
+            st.rerun()
 
-# Cuerpo Principal - Vista del Horario
-df = get_tasks()
+# Visualización por pestañas
+dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+tabs = st.tabs([f"🌙 {d}" for d in dias])
+df = obtener_datos()
 
-if not df.empty:
-    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    tabs = st.tabs(dias)
-
-    for i, tab in enumerate(tabs):
-        with tab:
-            dia_actual = dias[i]
-            tareas_dia = df[df['fase'] == dia_actual].sort_values("hora_inicio")
-            
-            if tareas_dia.empty:
-                st.write("*No hay actividades programadas para este ciclo.*")
+for i, tab in enumerate(tabs):
+    with tab:
+        dia_nombre = dias[i]
+        if not df.empty:
+            tareas = df[df['fase'] == dia_nombre].sort_values("inicio")
+            if tareas.empty:
+                st.info("No hay actividades programadas para este ciclo.")
             else:
-                for idx, row in tareas_dia.iterrows():
-                    with st.expander(f"🕒 {row['hora_inicio']} - {row['tarea']}"):
-                        st.write(f"**Prioridad:** {row['prioridad']}")
-                        st.write(f"**Duración:** {row['hora_inicio']} a {row['hora_fin']}")
-                        if st.button("Eliminar", key=f"del_{row['id']}"):
-                            delete_task(row['id'])
-                            st.rerun()
-else:
-    st.warning("El cielo está despejado. Comienza a añadir tus actividades.")
-
-# Pie de página decorativo
-st.markdown("<br><br><p style='text-align: center; color: #444;'>🌙 Tsukuyomi Personal System • v1.0</p>", unsafe_allow_html=True)
+                for _, row in tareas.iterrows():
+                    # Crear una fila con diseño limpio
+                    color = CAT_COLORS.get(row['categoria'], "#FFF")
+                    
+                    with st.container():
+                        col_info, col_btn = st.columns([0.85, 0.15])
+                        
+                        with col_info:
+                            # Badge de color según categoría
+                            st.markdown(f"""
+                                <div style="border-left: 5px solid {color}; padding-left: 15px; margin-bottom: 10px;">
+                                    <span style="color: {color}; font-weight: bold; font-size: 0.8rem;">{row['categoria'].upper()}</span><br>
+                                    <span style="font-size: 1.2rem; color: #E0E0E0;">{row['inicio']} - {row['fin']} | <b>{row['actividad']}</b></span>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        with col_btn:
+                            st.write("") # Espaciador
+                            if st.button("Eliminar", key=f"del_{row['id']}"):
+                                borrar_dato(row['id'])
+                                st.rerun()
+        else:
+            st.write("El cielo está despejado. Añade tu primera actividad en el panel izquierdo.")
