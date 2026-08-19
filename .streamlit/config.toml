@@ -1,6 +1,4 @@
 [theme]
 primaryColor = "#A9C9FF" # Azul plata lunar
-backgroundColor = "#0B1021" # Azul noche profundo
-secondaryBackgroundColor = "#1A2238" # Azul oscuro para tarjetas
-textColor = "#E0E0E0" # Gris seda (fácil de leer)
 font = "serif"
+# Eliminamos los fondos fijos para permitir que Streamlit cambie entre Claro y Oscuro automáticamente

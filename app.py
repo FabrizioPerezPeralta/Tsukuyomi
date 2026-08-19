@@ -1,10 +1,66 @@
 import streamlit as st
-from modules.database import init_db, agregar_actividad, obtener_datos, borrar_dato
+import os
+import pandas as pd
+from dotenv import load_dotenv
 from datetime import time
+from src.application.use_cases import ActivityUseCases
+from src.infrastructure.adapters.sqlite_repository import SQLiteRepository
+from src.infrastructure.adapters.supabase_repository import SupabaseRepository
+from src.infrastructure.services.telegram_service import TelegramNotificationService
+
+load_dotenv()
 
 # Configuración inicial
 st.set_page_config(page_title="Tsukuyomi Master System", page_icon="🌙", layout="wide")
-init_db()
+
+st.markdown("<h1 style='text-align: center; color: var(--primary-color);'>月読 TSUKUYOMI</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Sincronización Multidía de Actividades</p>", unsafe_allow_html=True)
+
+def check_password():
+    """Valida la contraseña maestra antes de mostrar el contenido."""
+    app_password = os.getenv("APP_PASSWORD")
+    if not app_password:
+        return True # Si no hay contraseña configurada, deja pasar (útil para desarrollo local rápido)
+        
+    def password_entered():
+        if st.session_state["password"] == app_password:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Por seguridad, borramos la contraseña del estado
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Muestra el formulario si no está autenticado
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.info("Santuario sellado. Ingresa la llave para acceder.")
+        st.text_input("Contraseña de Acceso", type="password", on_change=password_entered, key="password")
+        if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+            st.error("😕 Llave incorrecta")
+    return False
+
+# Si la contraseña es incorrecta o no se ha introducido, detenemos la ejecución de la app aquí
+if not check_password():
+    st.stop()
+
+@st.cache_resource
+def get_use_cases():
+    db_adapter = os.getenv("DB_ADAPTER", "local")
+    if db_adapter == "supabase":
+        repository = SupabaseRepository(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+    else:
+        repository = SQLiteRepository()
+    
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    notifier = TelegramNotificationService(token, chat_id) if token and chat_id else None
+    
+    return ActivityUseCases(repository, notifier)
+
+use_cases = get_use_cases()
 
 CAT_COLORS = {
     "Asignatura Universidad": "#4A90E2",
@@ -13,9 +69,6 @@ CAT_COLORS = {
     "Deporte": "#E67E22",
     "Producción": "#2ECC71"
 }
-
-st.markdown("<h1 style='text-align: center; color: #A9C9FF;'>月読 TSUKUYOMI</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8892B0;'>Sincronización Multidía de Actividades</p>", unsafe_allow_html=True)
 
 # --- SIDEBAR: CREADOR MULTIDÍA ---
 st.sidebar.markdown("### 🌑 Programación Maestra")
@@ -47,7 +100,7 @@ with st.sidebar:
         if st.button("🌙 Sincronizar Calendario"):
             if act_nombre:
                 for dia, horas in horarios_config.items():
-                    agregar_actividad(act_nombre, dia, horas[0], horas[1], categoria)
+                    use_cases.add_activity(act_nombre, dia, str(horas[0]), str(horas[1]), categoria)
                 st.success(f"Ciclo '{act_nombre}' sincronizado en {len(dias_seleccionados)} días.")
                 st.rerun()
             else:
@@ -56,7 +109,12 @@ with st.sidebar:
 # --- CUERPO PRINCIPAL: VISUALIZACIÓN ---
 dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 tabs = st.tabs([f"🏮 {d}" for d in dias_semana])
-df = obtener_datos()
+
+activities = use_cases.get_all_activities()
+if activities:
+    df = pd.DataFrame([vars(a) for a in activities])
+else:
+    df = pd.DataFrame(columns=["id", "actividad", "fase", "inicio", "fin", "categoria"])
 
 for i, tab in enumerate(tabs):
     with tab:
@@ -82,14 +140,14 @@ for i, tab in enumerate(tabs):
                             st.markdown(f"""
                                 <div style="margin-bottom: 15px;">
                                     <span style="color:{color}; font-size:0.75rem; font-weight:bold; letter-spacing:1px;">{row['categoria'].upper()}</span><br>
-                                    <span style="font-size:1.1rem; color:#E0E0E0;"><b>{row['actividad']}</b></span><br>
-                                    <span style="color:#8892B0; font-size:0.9rem;">🕒 {row['inicio']} - {row['fin']}</span>
+                                    <span style="font-size:1.1rem; color:var(--text-color);"><b>{row['actividad']}</b></span><br>
+                                    <span style="color:gray; font-size:0.9rem;">🕒 {row['inicio']} - {row['fin']}</span>
                                 </div>
                             """, unsafe_allow_html=True)
                         
                         with c_del:
                             if st.button("🗑️", key=f"del_{row['id']}"):
-                                borrar_dato(row['id'])
+                                use_cases.delete_activity(row['id'])
                                 st.rerun()
         else:
             st.write("El Santuario está vacío.")
