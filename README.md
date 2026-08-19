@@ -72,3 +72,9 @@ Sigue estos pasos para ejecutar el proyecto en tu entorno local:
 
 ---
 *«Organiza tus ciclos, domina tu tiempo.»*
+
+## ©️ Derechos de Autor / Copyright
+
+**© 2026 Fabrizio Salvador Elias Perez Peralta.** Todos los derechos reservados.
+
+Queda estrictamente prohibida la copia, reproducción, distribución, modificación o uso de este código fuente y aplicación sin el consentimiento previo y explícito del autor. Este proyecto es de uso privado y propiedad exclusiva de su creador.
